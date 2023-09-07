@@ -1,0 +1,55 @@
+pipeline {
+    agent any
+    
+    tools {
+        nodejs 'npm'
+    }
+    
+    stages {
+        stage('Git checkout') {
+            steps {
+                git branch: 'main', credentialsId: 'gitcred', url: 'https://github.com/jbantumelli/UI.git'
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                // Install Angular CLI globally
+                sh 'npm install -g @angular/cli'
+                
+                // Install project dependencies
+                sh 'npm install'
+                
+                // Build the project
+                sh 'ng build'
+            }
+        }
+        
+        stage('SonarQube analysis') {
+            steps {
+                script {
+                    def scannerHome = tool name: 'sonarserver', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                    withSonarQubeEnv('sonarserver') {
+                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=uitest -Dsonar.projectName=uitest"
+                    }
+                }
+            }
+        }
+        
+        stage('Publish to Artifactory') {
+            steps {
+                rtUpload (
+                    serverId: 'artifactory',
+                    spec: """{
+                        "files": [
+                            {
+                                "pattern": "dist/**",
+                                "target": "artifactory"
+                            }
+                        ]
+                    }"""
+                )
+            }
+        }
+    }
+}
